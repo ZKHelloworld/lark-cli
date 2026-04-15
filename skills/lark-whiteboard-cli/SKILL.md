@@ -18,6 +18,9 @@ metadata:
 
 ## Workflow
 
+> **当被作为 subAgent 调用时**：产物目录使用 `./diagrams/board_{n}/`（n 为 prompt 中传入的画板编号），
+> 而非时间戳目录，保证多个并行 subAgent 的产物互不冲突。
+
 > **这是画板，不是网页。** 画板是无限画布上自由放置元素，flex 布局是可选增强。
 
 ```

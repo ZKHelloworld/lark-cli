@@ -115,11 +115,9 @@ Drive Folder (云空间文件夹)
 
 内容适合可视化时，若图表类型和目标已从上下文可以清楚推断，直接进入执行；目标或类型有歧义时向用户确认，再主动说明将使用飞书画板承载图表，在文档中完成插入或更新。
 
-### 3. 按顺序阅读并执行
+### 3. 执行画板
 
-1. [`references/lark-doc-whiteboard.md`](references/lark-doc-whiteboard.md)：绘图路由、三 skill 分工边界、协同流程与图表类型映射
-2. [`../lark-whiteboard-cli/SKILL.md`](../lark-whiteboard-cli/SKILL.md)：图表内容生成完整流程 — Mermaid/DSL 路由、场景选型、DSL 生成与渲染验证
-3. [`../lark-whiteboard/SKILL.md`](../lark-whiteboard/SKILL.md)：通过 board_token 将生成的内容写入画板、查询与导出
+命中画板需求时，**必须**先读取 [`references/lark-doc-whiteboard.md`](references/lark-doc-whiteboard.md) 并严格按其流程执行（含三个 Skill 职责边界、路由规则、subAgent 委派规范）。
 
 ## 快速决策
 - 用户说“看一下文档里的图片/附件/素材”“预览素材”，优先用 `lark-cli docs +media-preview`。
