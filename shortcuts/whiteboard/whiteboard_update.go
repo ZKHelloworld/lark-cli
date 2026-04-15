@@ -242,22 +242,29 @@ func parseWBcliNodes(rawjson []byte) (wbNodes interface{}, err error, isRaw bool
 }
 
 func clearWhiteboardContent(ctx context.Context, runtime *common.RuntimeContext, wbToken string, newNodeIDs []string, dryRun bool) (int, []string, error) {
-	resp, err := runtime.DoAPI(&larkcore.ApiReq{
-		HttpMethod: http.MethodGet,
-		ApiPath:    fmt.Sprintf("/open-apis/board/v1/whiteboards/%s/nodes", url.PathEscape(wbToken)),
-	})
-	if err != nil {
-		return 0, nil, output.ErrNetwork(fmt.Sprintf("get whiteboard nodes failed: %v", err))
-	}
-	if resp.StatusCode != http.StatusOK {
-		return 0, nil, output.ErrAPI(resp.StatusCode, string(resp.RawBody), nil)
-	}
 	var nodes simpleNodeResp
-	err = json.Unmarshal(resp.RawBody, &nodes)
-	if err != nil {
-		return 0, nil, output.Errorf(output.ExitInternal, "parsing", fmt.Sprintf("parse whiteboard nodes failed: %v", err))
-	}
-	if nodes.Code != 0 {
+	for attempt := 1; ; attempt++ {
+		resp, err := runtime.DoAPI(&larkcore.ApiReq{
+			HttpMethod: http.MethodGet,
+			ApiPath:    fmt.Sprintf("/open-apis/board/v1/whiteboards/%s/nodes", url.PathEscape(wbToken)),
+		})
+		if err != nil {
+			return 0, nil, output.ErrNetwork(fmt.Sprintf("get whiteboard nodes failed: %v", err))
+		}
+		if resp.StatusCode != http.StatusOK {
+			return 0, nil, output.ErrAPI(resp.StatusCode, string(resp.RawBody), nil)
+		}
+		err = json.Unmarshal(resp.RawBody, &nodes)
+		if err != nil {
+			return 0, nil, output.Errorf(output.ExitInternal, "parsing", fmt.Sprintf("parse whiteboard nodes failed: %v", err))
+		}
+		if nodes.Code == 0 {
+			break
+		}
+		if attempt < whiteboardReadRetryMax && isRetryableWhiteboardReadNotReady(nodes.Msg) {
+			time.Sleep(whiteboardReadRetryInterval)
+			continue
+		}
 		return 0, nil, output.ErrAPI(nodes.Code, "get whiteboard nodes failed", fmt.Sprintf("get whiteboard nodes failed: %s", nodes.Msg))
 	}
 
@@ -321,7 +328,7 @@ func clearWhiteboardContent(ctx context.Context, runtime *common.RuntimeContext,
 		delReq := deleteNodeReqBody{
 			Ids: batchIds,
 		}
-		resp, err = runtime.DoAPI(&larkcore.ApiReq{
+		resp, err := runtime.DoAPI(&larkcore.ApiReq{
 			HttpMethod: http.MethodDelete,
 			ApiPath:    fmt.Sprintf("/open-apis/board/v1/whiteboards/%s/nodes/batch_delete", url.PathEscape(wbToken)),
 			Body:       delReq,
@@ -354,6 +361,15 @@ func updateWhiteboardByCode(ctx context.Context, runtime *common.RuntimeContext,
 		DiagramType:  0, // 0 表示自动识别
 	}
 
+	outData := make(map[string]string)
+	if overwrite {
+		numNodes, _, err := clearWhiteboardContent(ctx, runtime, wbToken, []string{}, false)
+		if err != nil {
+			return err
+		}
+		outData["deleted_nodes_num"] = fmt.Sprintf("%d", numNodes)
+	}
+
 	req := &larkcore.ApiReq{
 		HttpMethod:  http.MethodPost,
 		ApiPath:     fmt.Sprintf("/open-apis/board/v1/whiteboards/%s/nodes/plantuml", url.PathEscape(wbToken)),
@@ -381,17 +397,7 @@ func updateWhiteboardByCode(ctx context.Context, runtime *common.RuntimeContext,
 		return output.ErrAPI(createResp.Code, "update whiteboard by code failed", fmt.Sprintf("update whiteboard by code failed: %s", createResp.Msg))
 	}
 
-	outData := make(map[string]string)
 	outData["created_node_id"] = createResp.Data.NodeID
-	newNodeIDs := []string{createResp.Data.NodeID}
-
-	if overwrite {
-		numNodes, _, err := clearWhiteboardContent(ctx, runtime, wbToken, newNodeIDs, false)
-		if err != nil {
-			return err
-		}
-		outData["deleted_nodes_num"] = fmt.Sprintf("%d", numNodes)
-	}
 
 	runtime.OutFormat(outData, nil, func(w io.Writer) {
 		if outData["deleted_nodes_num"] != "" {
@@ -413,6 +419,13 @@ func updateWhiteboardByRawNodes(ctx context.Context, runtime *common.RuntimeCont
 		return err
 	}
 	outData := make(map[string]string)
+	if overwrite {
+		numNodes, _, err := clearWhiteboardContent(ctx, runtime, wbToken, []string{}, false)
+		if err != nil {
+			return err
+		}
+		outData["deleted_nodes_num"] = fmt.Sprintf("%d", numNodes)
+	}
 
 	req := &larkcore.ApiReq{
 		HttpMethod:  http.MethodPost,
@@ -452,14 +465,6 @@ func updateWhiteboardByRawNodes(ctx context.Context, runtime *common.RuntimeCont
 	}
 
 	outData["created_node_ids"] = strings.Join(createResp.Data.NodeIDs, ",")
-
-	if overwrite {
-		numNodes, _, err := clearWhiteboardContent(ctx, runtime, wbToken, createResp.Data.NodeIDs, false)
-		if err != nil {
-			return err
-		}
-		outData["deleted_nodes_num"] = fmt.Sprintf("%d", numNodes)
-	}
 
 	runtime.OutFormat(outData, nil, func(w io.Writer) {
 		if outData["deleted_nodes_num"] != "" {

@@ -8,6 +8,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/larksuite/cli/internal/cmdutil"
 	"github.com/larksuite/cli/internal/core"
@@ -593,6 +594,74 @@ func TestWhiteboardUpdateExecute_RawWithOverwrite(t *testing.T) {
 
 	source := `{"code":0,"data":{"to":"openapi","result":{"nodes":[]}}}`
 	args := []string{"+update", "--whiteboard-token", "test-token-raw-overwrite", "--input_format", "raw", "--overwrite", "--source", source}
+	if err := runUpdateShortcut(t, WhiteboardUpdate, args, factory, stdout); err != nil {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestWhiteboardUpdateExecute_WithOverwriteRetryOnDocApplying(t *testing.T) {
+	origSkip := skipDeleteNodesBatchSleep
+	origMax := whiteboardReadRetryMax
+	origInterval := whiteboardReadRetryInterval
+	skipDeleteNodesBatchSleep = true
+	whiteboardReadRetryMax = 3
+	whiteboardReadRetryInterval = 1 * time.Millisecond
+	defer func() {
+		skipDeleteNodesBatchSleep = origSkip
+		whiteboardReadRetryMax = origMax
+		whiteboardReadRetryInterval = origInterval
+	}()
+
+	factory, stdout, reg := newUpdateExecuteFactory(t)
+
+	reg.Register(&httpmock.Stub{
+		Method: "POST",
+		URL:    "/open-apis/board/v1/whiteboards/test-token-overwrite-retry/nodes/plantuml",
+		Body: map[string]interface{}{
+			"code": 0,
+			"msg":  "success",
+			"data": map[string]interface{}{
+				"node_id": "new-node-123",
+			},
+		},
+	})
+
+	reg.Register(&httpmock.Stub{
+		Method: "GET",
+		URL:    "/open-apis/board/v1/whiteboards/test-token-overwrite-retry/nodes",
+		Body: map[string]interface{}{
+			"code": 999999,
+			"msg":  "doc is applying [@from@] doc data is not ready [@from@] resource error [@from@] whiteboard",
+		},
+	})
+
+	reg.Register(&httpmock.Stub{
+		Method: "GET",
+		URL:    "/open-apis/board/v1/whiteboards/test-token-overwrite-retry/nodes",
+		Body: map[string]interface{}{
+			"code": 0,
+			"msg":  "",
+			"data": map[string]interface{}{
+				"nodes": []map[string]interface{}{
+					{"id": "old-node-1", "children": []string{}},
+					{"id": "old-node-2", "children": []string{}},
+				},
+			},
+		},
+	})
+
+	reg.Register(&httpmock.Stub{
+		Method: "DELETE",
+		URL:    "/open-apis/board/v1/whiteboards/test-token-overwrite-retry/nodes/batch_delete",
+		Body: map[string]interface{}{
+			"code": 0,
+			"msg":  "success",
+		},
+	})
+
+	source := `graph TD
+A-->B`
+	args := []string{"+update", "--whiteboard-token", "test-token-overwrite-retry", "--input_format", "mermaid", "--overwrite", "--source", source}
 	if err := runUpdateShortcut(t, WhiteboardUpdate, args, factory, stdout); err != nil {
 		t.Fatalf("err=%v", err)
 	}

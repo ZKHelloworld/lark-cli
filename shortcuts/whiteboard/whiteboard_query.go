@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/larksuite/cli/extension/fileio"
 	"github.com/larksuite/cli/internal/output"
@@ -174,23 +175,34 @@ func fetchWhiteboardNodes(runtime *common.RuntimeContext, wbToken string) (*wbNo
 		HttpMethod: http.MethodGet,
 		ApiPath:    fmt.Sprintf("/open-apis/board/v1/whiteboards/%s/nodes", wbToken),
 	}
-	resp, err := runtime.DoAPI(req)
-	if err != nil {
-		return nil, output.ErrNetwork(fmt.Sprintf("get whiteboard nodes failed: %v", err))
-	}
-	// 检查响应状态码
-	if resp.StatusCode != http.StatusOK {
-		return nil, output.ErrAPI(resp.StatusCode, string(resp.RawBody), nil)
-	}
-	var nodes wbNodesResp
-	err = json.Unmarshal(resp.RawBody, &nodes)
-	if err != nil {
-		return nil, output.Errorf(output.ExitInternal, "parsing", fmt.Sprintf("parse whiteboard nodes failed: %v", err))
-	}
-	if nodes.Code != 0 {
+
+	for attempt := 1; ; attempt++ {
+		resp, err := runtime.DoAPI(req)
+		if err != nil {
+			return nil, output.ErrNetwork(fmt.Sprintf("get whiteboard nodes failed: %v", err))
+		}
+		// 检查响应状态码
+		if resp.StatusCode != http.StatusOK {
+			return nil, output.ErrAPI(resp.StatusCode, string(resp.RawBody), nil)
+		}
+
+		var nodes wbNodesResp
+		err = json.Unmarshal(resp.RawBody, &nodes)
+		if err != nil {
+			return nil, output.Errorf(output.ExitInternal, "parsing", fmt.Sprintf("parse whiteboard nodes failed: %v", err))
+		}
+
+		if nodes.Code == 0 {
+			return &nodes, nil
+		}
+
+		if attempt < whiteboardReadRetryMax && isRetryableWhiteboardReadNotReady(nodes.Msg) {
+			time.Sleep(whiteboardReadRetryInterval)
+			continue
+		}
+
 		return nil, output.ErrAPI(nodes.Code, "get whiteboard nodes failed", fmt.Sprintf("get whiteboard nodes failed: %s", nodes.Msg))
 	}
-	return &nodes, nil
 }
 
 type syntaxInfo struct {
