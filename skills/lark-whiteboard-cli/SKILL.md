@@ -1,7 +1,7 @@
 ---
 name: lark-whiteboard-cli
-description: >
-  当用户要求或使用飞书画板绘制架构图、流程图、思维导图、时序图或其他可视化图表时使用此 skill，作为使用 whiteboard-cli 设计图表布局的指南
+version: 0.2.0
+description: 使用 whiteboard-cli 工具时启用此 skill，支持将 DSL/Mermaid 渲染为常见图表（架构图、流程图、时序图、思维导图、组织架构图等），可配合 lark-cli 写入飞书画板。
 compatibility: Requires Node.js 18+
 metadata:
   requires:
@@ -35,9 +35,9 @@ Step 2: 生成完整 DSL（含颜色）
   - 按 schema.md 语法输出完整 JSON
   - 连线参考 connectors.md，排版参考 typography.md
 
-  注意：部分图形（鱼骨/飞轮/柱状/折线等）要按 scene 指南的脚本模板写 .js 脚本生成 JSON：
+  注意：部分图形（鱼骨/飞轮/柱状/折线等）要按 scene 指南的脚本模板写 .cjs 脚本生成 JSON：
     1. 创建产物目录 ./diagrams/YYYY-MM-DDTHHMMSS/
-    2. 将脚本保存为 diagram.gen.js，执行 node diagram.gen.js 产出 diagram.json
+    2. 将脚本保存为 diagram.gen.cjs，执行 node diagram.gen.cjs 产出 diagram.json
     3. 用产出的 diagram.json 进入 Step 3
 
 Step 3: 渲染 & 审查 → 交付
@@ -58,8 +58,10 @@ Step 3: 渲染 & 审查 → 交付
 
 涉及 Dagre / Flex 的具体边界、危险模式、混合布局原则，统一以 `references/layout.md` 为准；scene 文件只描述场景差异，不重复定义通用布局规则。
 
-> **构建方式是强约束**：当 scene 指南要求"脚本生成"时，必须先写脚本（.js）并用 `node` 执行来产出 JSON 文件。绝对定位场景（鱼骨图、飞轮图、柱状图、折线图等）的坐标需要数学计算，直接手写 JSON 极易导致节点重叠或连线穿模。
----
+> **构建方式是强约束**：当 scene 指南要求"脚本生成"时，必须先写脚本（.cjs）并用 `node` 执行来产出 JSON 文件。绝对定位场景（鱼骨图、飞轮图、柱状图、折线图等）的坐标需要数学计算，直接手写 JSON 极易导致节点重叠或连线穿模。
+
+> [!WARNING]
+> **防错提示（脚本后缀强制要求）**：为了兼容包含 `type: module` 的各类前端项目，**必须将生成的执行脚本后缀命名为 `.cjs`**（例如 `diagram.gen.cjs`），并使用 CommonJS 规范（`require`）。严禁直接使用 `.js` 后缀，否则在执行 `node` 时极易触发 `require is not defined in ES module scope` 的阻断报错！
 
 ## 渲染路径选择（DSL or Mermaid）
 
@@ -124,7 +126,7 @@ Step 3: 渲染 & 审查 → 交付
 ./diagrams/
   2026-03-27T143000/      ← 自动按时间创建，无需起名
     diagram.json          ← DSL（CLI 输入）
-    diagram.gen.js        ← 坐标计算脚本（仅脚本构建方式）
+    diagram.gen.cjs       ← 坐标计算脚本（仅脚本构建方式）
     diagram.png           ← 最终图片
     diagram.mmd           ← Mermaid 源码（仅 Mermaid 路径）
 ```
@@ -164,7 +166,7 @@ npx -y @larksuite/whiteboard-cli@^0.2.0 -i ./diagrams/2026-03-27T143000/diagram.
 > **强制执行 Dry Run（状态探测）**
 > 必须先在命令中添加 `--overwrite --dry-run` 参数来探测画板当前状态。示例命令：
 > ```bash
-> npx -y @larksuite/whiteboard-cli@^0.2.0 --to openapi -i <输入文件> --format json | lark-cli whiteboard +update --whiteboard-token <Token> --source - --overwrite --dry-run --as user
+> npx -y @larksuite/whiteboard-cli@^0.2.0 --to openapi -i <输入文件> --format json | lark-cli whiteboard +update --whiteboard-token <Token> --overwrite --dry-run --as user
 > ```
 >
 > **解析结果并拦截**
@@ -175,7 +177,7 @@ npx -y @larksuite/whiteboard-cli@^0.2.0 -i ./diagrams/2026-03-27T143000/diagram.
 > - 用户可能会要求你不覆盖更新画板内容，在这种情况下，移除 `--overwrite` 和 `--dry-run` 参数再上传。
 
 ```bash
-npx -y @larksuite/whiteboard-cli@^0.2.0 --to openapi -i <输入文件> --format json | lark-cli whiteboard +update --whiteboard-token <画板Token> --source - --yes --as user
+npx -y @larksuite/whiteboard-cli@^0.2.0 --to openapi -i <输入文件> --format json | lark-cli whiteboard +update --whiteboard-token <画板Token> --yes --as user
 ```
 > 画板一经上传不可修改。如需应用身份上传，将 `--as user` 替换为 `--as bot`。
 > 如果画板非空，先加 `--overwrite --dry-run` 检查待删除节点数，向用户确认后去掉 `--dry-run` 执行。
