@@ -47,6 +47,10 @@ metadata:
 | [`+query`](references/lark-whiteboard-query.md)   | 查询画板，导出为预览图片、代码或原始节点结构                      |
 | [`+update`](references/lark-whiteboard-update.md) | 更新画板内容，支持 PlantUML、Mermaid 或 OpenAPI 原生格式输入 |
 
+> **⚠️ 强制规范示例（通过 stdin 更新）**：
+> 如果你要更新画板，并且数据来源于本地文件（即通过标准输入传递），**必须**使用组合参数 `--source - --input_format <格式>`。
+> 例如传递 Mermaid：`cat chart.mmd | lark-cli whiteboard +update <node_token> --source - --input_format mermaid`
+
 ## Workflow
 
 ### 场景 1: 创作一个画板

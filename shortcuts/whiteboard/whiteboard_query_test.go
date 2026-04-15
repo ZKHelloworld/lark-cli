@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/larksuite/cli/internal/cmdutil"
 	"github.com/larksuite/cli/internal/core"
@@ -708,6 +709,45 @@ func TestFetchWhiteboardNodes_APIError(t *testing.T) {
 	// We expect an error here, but don't fail the test because it's testing error path
 	if err == nil {
 		t.Fatalf("Expected API error, but got none")
+	}
+}
+
+func TestFetchWhiteboardNodes_RetryOnDocApplying(t *testing.T) {
+	origMax := whiteboardReadRetryMax
+	origInterval := whiteboardReadRetryInterval
+	whiteboardReadRetryMax = 3
+	whiteboardReadRetryInterval = 1 * time.Millisecond
+	defer func() {
+		whiteboardReadRetryMax = origMax
+		whiteboardReadRetryInterval = origInterval
+	}()
+
+	factory, stdout, reg := newExecuteFactory(t)
+
+	reg.Register(&httpmock.Stub{
+		Method: "GET",
+		URL:    "/open-apis/board/v1/whiteboards/test-token-retry-query/nodes",
+		Body: map[string]interface{}{
+			"code": 999999,
+			"msg":  "doc is applying [@from@] doc data is not ready [@from@] resource error [@from@] whiteboard",
+		},
+	})
+
+	reg.Register(&httpmock.Stub{
+		Method: "GET",
+		URL:    "/open-apis/board/v1/whiteboards/test-token-retry-query/nodes",
+		Body: map[string]interface{}{
+			"code": 0,
+			"msg":  "success",
+			"data": map[string]interface{}{
+				"nodes": []interface{}{map[string]interface{}{"id": "node1"}},
+			},
+		},
+	})
+
+	args := []string{"+query", "--whiteboard-token", "test-token-retry-query", "--output_as", "raw"}
+	if err := runShortcut(t, WhiteboardQuery, args, factory, stdout); err != nil {
+		t.Fatalf("err=%v", err)
 	}
 }
 
